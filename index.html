@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>scrcpy in Browser via WebUSB (no edits!)</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #111; color: #eee; text-align: center; }
+    #video { width: 100%; height: auto; touch-action: none; }
+    #overlay, #controls { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+    #connect { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10; pointer-events: auto; }
+  </style>
+</head>
+<body>
+  <button id="connect">Connect & Start scrcpy</button>
+  <video id="video" autoplay playsinline></video>
+  <div id="overlay"></div>
+  <script type="module">
+    import { AdbWebUsbBackend } from 'https://esm.sh/@yume-chan/adb-backend-webusb';
+    import { AdbScrcpyClient } from 'https://esm.sh/@yume-chan/adb-scrcpy';
+    import { WebCodecsVideoDecoder } from 'https://esm.sh/@yume-chan/scrcpy-decoder-webcodecs';
+
+    const video = document.getElementById('video');
+    const connect = document.getElementById('connect');
+
+    connect.onclick = async () => {
+      try {
+        connect.disabled = true;
+        const backend = await AdbWebUsbBackend.requestDevice();
+        const transport = await backend.connect();
+        const scrcpy = await AdbScrcpyClient.open(transport);
+        const decoder = new WebCodecsVideoDecoder({ output: chunk => video.src = URL.createObjectURL(new Blob([chunk], { type: "video/mp4" })) });
+        scrcpy.videoStream.pipeTo(decoder.writable);
+        decoder.start();
+
+        // Touch control mapping
+        video.addEventListener('pointerdown', async e => {
+          const { width, height } = video.getBoundingClientRect();
+          const x = Math.floor((e.offsetX / width) * scrcpy.width);
+          const y = Math.floor((e.offsetY / height) * scrcpy.height);
+          await scrcpy.injectTouch(x, y);
+        });
+
+        console.log('scrcpy started!');
+      } catch (err) {
+        console.error(err);
+        alert('Failed to connect: ' + err);
+        connect.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
